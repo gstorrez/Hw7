@@ -1,0 +1,53 @@
+library(ISLR2)
+library(rpart)
+library(rpart.plot)
+library(tidyverse)
+library(caret)
+library(randomForest)
+library(dplyr)
+library(gbm)
+
+data(College)
+college <- College %>%
+mutate_if(is.character, as.factor)
+college_tree <- rpart(Private ~., data = college)
+rpart.plot(college_tree)
+set.seed(888)
+split_index <- createDataPartition(college$Private, p = 0.8, list = FALSE)
+train <- college[split_index, ]
+test <- college[-split_index, ]
+error_df <- data.frame(matrix(ncol = 3, nrow = ncol(split_index)))
+colnames(error_df) <- c('tree_error', 'log_error', 'fold_number')
+  for(i in 1:ncol(split_index)) {
+    train <- college[split_index[,i],]
+    features_test <- college[-split_index[,i],
+    !(colnames(college) %in% c('Private'))]
+    target_test <- college[-split_index[,i], 'Private']  # Corrected
+    college_tree <- rpart(Private ~., data = train)
+    college_tree_pred <- predict(college_tree, newdata = features_test,
+    type = 'class')
+    college_tree_error <- mean(ifelse(college_tree_pred !=
+    target_test, 1, 0))  
+
+    college_log <- glm(Private ~ ., data = train, family = 'binomial')
+    college_log_pred <- predict(college_log, newdata = features_test, type = 'response')
+    college_log_pred <- factor(ifelse(college_log_pred >= 0.5, 'Yes', 'No'))
+    college_log_error <- mean(ifelse(college_log_pred !=
+    target_test, 1, 0))  
+    error_df[i, 'fold_number'] <- i
+    error_df[i, 'tree_error'] <- college_tree_error
+    error_df[i, 'log_error'] <- college_log_error
+  }
+
+
+train_rf <- college[split_index[,1],]
+features_test_rf <- college[-split_index[,1], !(colnames(college) %in% c('Private'))]
+target_test_rf <- college[-split_index[,1], 'Private']
+college_rf <- randomForest(Private ~. , data = train_rf, mtry = 3)
+college_rf_pred <- predict(college_rf, newdata = features_test_rf, type = 'response')
+college_rf_error <- ifelse(college_rf_pred != target_test_rf, 1, 0)  
+confusionMatrix(target_test_rf, college_rf_pred)  
+
+print(paste("Decision Tree Mean Error Rate:", mean(error_df$tree_error)))
+print(paste("Logistic Regression Mean Error Rate:", mean(error_df$log_error)))
+print(paste("Random Forest Mean Error Rate:", mean(college_rf_error)))
